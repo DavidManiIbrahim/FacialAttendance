@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}students{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <p class="eyebrow">Directory</p>
+            <h1>students</h1>
+        </div>
+    </div>
+
+    <section class="panel employee-panel">
+        <h2>Add student</h2>
+        <form method="post" action="{{ url_for('students') }}" id="employeeForm">
+            <div class="field-row">
+                <label>
+                    Full name
+                    <input type="text" name="name" required>
+                </label>
+                <label>
+                    ID No
+                    <input type="text" name="employee_code" required>
+                </label>
+            </div>
+
+            <div class="field-row">
+                <label>
+                    Email
+                    <input type="email" name="email">
+                </label>
+                <label>
+                    Department
+                    <input type="text" name="department">
+                </label>
+            </div>
+
+            <div class="camera-box">
+                <video id="video" autoplay playsinline muted></video>
+                <canvas id="canvas" width="320" height="240" hidden></canvas>
+                <div class="camera-actions">
+                    <button type="button" id="startCameraBtn">Start camera</button>
+                    <button type="button" id="captureBtn" class="secondary" disabled>Capture face</button>
+                </div>
+                <p id="cameraMessage" class="message" role="status" aria-live="polite">Start the camera before capturing a face.</p>
+                <img id="capturedPreview" class="capture-preview" alt="Captured employee face" hidden>
+            </div>
+
+            <input type="hidden" name="photo" id="photoData">
+            <button type="submit">Save Student</button>
+        </form>
+    </section>
+
+    <section class="panel">
+        <h2>Registered students</h2>
+        <div class="employee-grid">
+            {% for employee in students %}
+            <div class="employee-card">
+                <img src="{{ url_for('employee_face', filename=employee.photo_path.rsplit('/', 1)[-1]) if employee.photo_path else url_for('static', filename='images/avatar-placeholder.svg') }}" alt="{{ employee.name }}">
+                <h3>{{ employee.name }}</h3>
+                <p>{{ employee.employee_code }}</p>
+                <small>{{ employee.department or 'No department' }}</small>
+            </div>
+            {% else %}
+            <p>No students registered yet.</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const photoInput = document.getElementById('photoData');
+    const form = document.getElementById('employeeForm');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const captureBtn = document.getElementById('captureBtn');
+    const cameraMessage = document.getElementById('cameraMessage');
+    const capturedPreview = document.getElementById('capturedPreview');
+    let cameraStream = null;
+
+    function setCameraMessage(message, state = '') {
+        cameraMessage.textContent = message;
+        cameraMessage.dataset.state = state;
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setCameraMessage('Camera access is unavailable. Open this page on localhost or use a supported browser.', 'error');
+            return;
+        }
+
+        startCameraBtn.disabled = true;
+        setCameraMessage('Requesting camera access...');
+        try {
+            cameraStream?.getTracks().forEach((track) => track.stop());
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            video.srcObject = cameraStream;
+            await video.play();
+
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('The camera did not provide a video frame.')), 5000);
+                    video.addEventListener('loadeddata', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    }, { once: true });
+                });
+            }
+
+            if (!video.videoWidth || !video.videoHeight) {
+                throw new Error('The camera did not provide a usable video frame.');
+            }
+
+            captureBtn.disabled = false;
+            setCameraMessage('Camera ready. Center the employee’s face and capture.', 'success');
+        } catch (error) {
+            cameraStream?.getTracks().forEach((track) => track.stop());
+            cameraStream = null;
+            video.srcObject = null;
+            captureBtn.disabled = true;
+            const message = error.name === 'NotAllowedError'
+                ? 'Camera permission was denied. Allow camera access in your browser, then try again.'
+                : error.name === 'NotFoundError'
+                    ? 'No camera was found on this device.'
+                    : error.message || 'Could not start the camera.';
+            setCameraMessage(message, 'error');
+        } finally {
+            startCameraBtn.disabled = false;
+        }
+    }
+
+    startCameraBtn.addEventListener('click', startCamera);
+    captureBtn.addEventListener('click', () => {
+        if (!cameraStream || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+            setCameraMessage('Start the camera and wait for a live frame before capturing.', 'error');
+            captureBtn.disabled = true;
+            return;
+        }
+
+        const scale = Math.min(1, 720 / video.videoWidth);
+        canvas.width = Math.round(video.videoWidth * scale);
+        canvas.height = Math.round(video.videoHeight * scale);
+        const context = canvas.getContext('2d');
+        try {
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            photoInput.value = canvas.toDataURL('image/jpeg', 0.88);
+            capturedPreview.src = photoInput.value;
+            capturedPreview.hidden = false;
+            setCameraMessage('Face captured. Save the student data when ready.', 'success');
+        } catch (error) {
+            setCameraMessage('Could not capture a frame. Check camera permission and try again.', 'error');
+        }
+    });
+</script>
+{% endblock %}

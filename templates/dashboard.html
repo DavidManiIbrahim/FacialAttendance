@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="page-header">
+        <div>
+            <p class="eyebrow">Welcome back</p>
+            <h1>Dashboard</h1>
+        </div>
+        <div class="user-chip">{{ session.get('username', 'Admin') }}</div>
+    </div>
+
+    <section class="stats-grid">
+        <div class="stat-card">
+            <span>Total Students</span>
+            <strong>{{ total_students }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>Present today</span>
+            <strong>{{ today_count }}</strong>
+        </div>
+        <div class="stat-card">
+            <span>Attendance logs</span>
+            <strong>{{ recent_logs|length }}</strong>
+        </div>
+    </section>
+
+    <section class="panel">
+        <h2>Recent attendance</h2>
+        <div class="table-scroll" role="region" aria-label="Recent attendance" tabindex="0">
+        <table>
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Code</th>
+                    <th>Department</th>
+                    <th>Check-in</th>
+                    <th>Check-out</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if recent_logs %}
+                    {% for row in recent_logs %}
+                    <tr>
+                        <td>{{ row.name }}</td>
+                        <td>{{ row.employee_code }}</td>
+                        <td>{{ row.department or '—' }}</td>
+                        <td>{{ row.check_in_at or '—' }}</td>
+                        <td>{{ row.check_out_at or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5">No attendance logs yet.</td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+</div>
+{% endblock %}

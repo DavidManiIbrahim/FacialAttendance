@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}Attendance{% endblock %}
+
+{% block content %}
+<div class="container narrow">
+    <div class="page-header">
+        <div>
+            <p class="eyebrow">Live check-in</p>
+            <h1>Mark attendance</h1>
+        </div>
+    </div>
+
+    <div class="panel attendance-panel">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas" width="320" height="240" hidden></canvas>
+
+        <div class="camera-actions">
+            <button type="button" id="startCameraBtn">Start camera</button>
+            <button type="button" id="identifyBtn" class="secondary" disabled>Identify employee</button>
+        </div>
+
+        <div id="statusMessage" class="message" role="status" aria-live="polite">Start the camera, then identify the employee.</div>
+
+        <section id="employeeMatch" class="employee-match" aria-live="polite" hidden>
+            <div>
+                <p class="eyebrow">Face matched</p>
+                <h2 id="employeeName"></h2>
+                <p id="employeeCode" class="muted"></p>
+            </div>
+            <div class="attendance-actions">
+                <button type="button" id="checkInBtn" class="primary" disabled>Check in</button>
+                <button type="button" id="checkOutBtn" class="secondary" disabled>Check out</button>
+            </div>
+        </section>
+    </div>
+</div>
+
+<script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const statusMessage = document.getElementById('statusMessage');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const identifyBtn = document.getElementById('identifyBtn');
+    const checkInBtn = document.getElementById('checkInBtn');
+    const checkOutBtn = document.getElementById('checkOutBtn');
+    const employeeMatch = document.getElementById('employeeMatch');
+    let cameraStream = null;
+    let identifiedEmployee = null;
+
+    function setStatus(message, state = '') {
+        statusMessage.textContent = message;
+        statusMessage.dataset.state = state;
+    }
+
+    async function startCamera() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            setStatus('Camera access is unavailable. Open this page on localhost or use a supported browser.', 'error');
+            return;
+        }
+
+        startCameraBtn.disabled = true;
+        setStatus('Requesting camera access...');
+        try {
+            cameraStream?.getTracks().forEach((track) => track.stop());
+            cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+            video.srcObject = cameraStream;
+            await video.play();
+
+            if (video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('The camera did not provide a video frame.')), 5000);
+                    video.addEventListener('loadeddata', () => {
+                        clearTimeout(timeout);
+                        resolve();
+                    }, { once: true });
+                });
+            }
+
+            if (!video.videoWidth || !video.videoHeight) {
+                throw new Error('The camera did not provide a usable video frame.');
+            }
+
+            identifyBtn.disabled = false;
+            setStatus('Camera ready. Center the employee’s face and identify them.', 'success');
+        } catch (error) {
+            cameraStream?.getTracks().forEach((track) => track.stop());
+            cameraStream = null;
+            video.srcObject = null;
+            identifyBtn.disabled = true;
+            const message = error.name === 'NotAllowedError'
+                ? 'Camera permission was denied. Allow camera access in your browser, then try again.'
+                : error.name === 'NotFoundError'
+                    ? 'No camera was found on this device.'
+                    : error.message || 'Could not start the camera.';
+            setStatus(message, 'error');
+        } finally {
+            startCameraBtn.disabled = false;
+        }
+    }
+
+    startCameraBtn.addEventListener('click', startCamera);
+
+    identifyBtn.addEventListener('click', async () => {
+        if (!cameraStream || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth) {
+            setStatus('Start the camera and wait for a live frame before identifying.', 'error');
+            identifyBtn.disabled = true;
+            return;
+        }
+
+        identifiedEmployee = null;
+        employeeMatch.hidden = true;
+        checkInBtn.disabled = true;
+        checkOutBtn.disabled = true;
+        identifyBtn.disabled = true;
+        setStatus('Matching face...');
+
+        try {
+            const scale = Math.min(1, 720 / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            const photo = canvas.toDataURL('image/jpeg', 0.88);
+            const recognitionResponse = await fetch('/api/recognize-face', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ photo })
+            });
+            const recognitionResult = await recognitionResponse.json();
+            if (!recognitionResult.success) {
+                statusMessage.textContent = recognitionResult.message || 'Face not recognized.';
+                return;
+            }
+
+            identifiedEmployee = recognitionResult;
+            document.getElementById('employeeName').textContent = recognitionResult.name;
+            document.getElementById('employeeCode').textContent = recognitionResult.employee_code;
+            employeeMatch.hidden = false;
+            checkInBtn.disabled = !recognitionResult.can_check_in;
+            checkOutBtn.disabled = !recognitionResult.can_check_out;
+            if (!recognitionResult.can_check_in && !recognitionResult.can_check_out) {
+                setStatus('Attendance is already complete for this employee today.', 'success');
+            } else {
+                setStatus('Choose the available attendance action.', 'success');
+            }
+        } catch (error) {
+            setStatus('There was a problem matching the face.', 'error');
+        } finally {
+            identifyBtn.disabled = !cameraStream;
+        }
+    });
+
+    async function recordAttendance(action) {
+        if (!identifiedEmployee) {
+            setStatus('Identify an employee before recording attendance.', 'error');
+            return;
+        }
+
+        checkInBtn.disabled = true;
+        checkOutBtn.disabled = true;
+        setStatus(action === 'check-in' ? 'Recording check-in...' : 'Recording check-out...');
+        try {
+            const attendanceResponse = await fetch('/api/mark-attendance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ employee_id: identifiedEmployee.employee_id, action })
+            });
+            const attendanceResult = await attendanceResponse.json();
+            if (!attendanceResponse.ok || !attendanceResult.success) {
+                setStatus(attendanceResult.message || 'Attendance could not be recorded.', 'error');
+                checkInBtn.disabled = false;
+                checkOutBtn.disabled = false;
+                return;
+            }
+            window.location.assign('/attendance/success');
+        } catch (error) {
+            setStatus('There was a problem recording attendance.', 'error');
+            checkInBtn.disabled = false;
+            checkOutBtn.disabled = false;
+        }
+    }
+
+    checkInBtn.addEventListener('click', () => recordAttendance('check-in'));
+    checkOutBtn.addEventListener('click', () => recordAttendance('check-out'));
+</script>
+{% endblock %}

@@ -1,0 +1,5 @@
+database/*.db
+uploads/faces/*
+!uploads/faces/.gitkeep
+.DS_Store
+.vscode/

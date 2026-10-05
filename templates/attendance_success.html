@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Attendance Recorded{% endblock %}
+
+{% block content %}
+<div class="container narrow success-page">
+    <section class="success-panel" aria-labelledby="successTitle">
+        <div class="success-mark" aria-hidden="true">✓</div>
+        <p class="eyebrow">Attendance recorded</p>
+        <h1 id="successTitle">{{ 'Checked in' if result.action == 'check-in' else 'Checked out' }}</h1>
+        <p class="success-lead">{{ result.employee_name }} was matched and their attendance was saved.</p>
+
+        <dl class="success-details">
+            <div>
+                <dt>Employee code</dt>
+                <dd>{{ result.employee_code }}</dd>
+            </div>
+            <div>
+                <dt>Recorded at</dt>
+                <dd>{{ result.marked_at }}</dd>
+            </div>
+        </dl>
+
+        <div class="success-actions">
+            <a class="button-link" href="{{ url_for('attendance') }}">Back to attendance</a>
+            <a class="text-link" href="{{ url_for('dashboard') }}">View dashboard</a>
+        </div>
+    </section>
+</div>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div class="container hero-grid">
+    <div class="hero-copy">
+        <p class="eyebrow">Smart workforce solution</p>
+        <h1 class="h3">Facial Student
+            <br> Attendance System</h1>
+        <p class="lead">Track attendance with live face recognition, automatic logs, and a clean admin dashboard.</p>
+        <div class="tag-list">
+            <span>Webcam capture</span>
+            <span>Student registry</span>
+            <span>Daily reports</span>
+        </div>
+    </div>
+
+    <div class="panel login-box">
+        <h2>Admin Login</h2>
+        <form method="post" action="{{ url_for('login') }}">
+            <label>
+                Username
+                <input type="text" name="username" required>
+            </label>
+            <label>
+                Password
+                <input type="password" name="password" required>
+            </label>
+            <button type="submit">Login</button>
+        </form>
+        <p class="muted">Demo account: admin / admin123</p>
+    </div>
+</div>
+{% endblock %}
