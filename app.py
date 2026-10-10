@@ -49,7 +49,7 @@ def dashboard():
         return redirect(url_for('index'))
 
     conn = get_connection()
-    total_employees = conn.execute('SELECT COUNT(*) FROM students').fetchone()[0]
+    total_students = conn.execute('SELECT COUNT(*) FROM students').fetchone()[0]
     today_count = conn.execute("SELECT COUNT(*) FROM attendance WHERE date(check_in_at) = date('now')").fetchone()[0]
     recent_logs = conn.execute(
         '''
@@ -62,12 +62,12 @@ def dashboard():
     ).fetchall()
     conn.close()
 
-    return render_template('dashboard.html', total_employees=total_employees, today_count=today_count, recent_logs=recent_logs)
+    return render_template('dashboard.html', total_students=total_students, today_count=today_count, recent_logs=recent_logs)
 
 
 @app.route('/employees', methods=['GET', 'POST'], endpoint='employees')
-@app.route('/students', methods=['GET', 'POST'], endpoint='students')
-def employees():
+@app.route('/register', methods=['GET', 'POST'])
+def register():
     if not session.get('user_id'):
         return redirect(url_for('index'))
 
@@ -80,17 +80,17 @@ def employees():
 
         if not name or not employee_code:
             flash('Name and employee code are required.', 'error')
-            return redirect(url_for('employees'))
+            return redirect(url_for('register'))
         if not photo:
             flash('A face photo is required.', 'error')
-            return redirect(url_for('employees'))
+            return redirect(url_for('register'))
 
         conn = get_connection()
         existing = conn.execute('SELECT id FROM students WHERE employee_code = ? LIMIT 1', (employee_code,)).fetchone()
         if existing:
             conn.close()
-            flash('Employee code already exists.', 'error')
-            return redirect(url_for('employees'))
+            flash('Student ID already exists.', 'error')
+            return redirect(url_for('register'))
 
         try:
             saved_path = save_face_from_data_url(photo, employee_code)
@@ -99,13 +99,23 @@ def employees():
                 (employee_code, name, email, department, saved_path),
             )
             conn.commit()
-            flash('Employee saved successfully.', 'success')
+            flash('Student registered successfully.', 'success')
         except Exception as exc:
             flash(str(exc), 'error')
         finally:
             conn.close()
 
-        return redirect(url_for('employees'))
+        return redirect(url_for('register'))
+
+    conn = get_connection()
+    conn.close()
+    return render_template('register.html')
+
+
+@app.get('/students')
+def students():
+    if not session.get('user_id'):
+        return redirect(url_for('index'))
 
     conn = get_connection()
     students_list = conn.execute('SELECT * FROM students ORDER BY created_at DESC').fetchall()
@@ -196,7 +206,7 @@ def api_mark_attendance():
     ).fetchone()
     if employee is None:
         conn.close()
-        return jsonify({'success': False, 'message': 'Employee record not found.'}), 404
+        return jsonify({'success': False, 'message': 'Student record not found.'}), 404
 
     marked_at = datetime.now()
     record = conn.execute(

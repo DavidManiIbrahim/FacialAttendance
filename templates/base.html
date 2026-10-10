@@ -12,6 +12,7 @@
         {% if session.get('user_id') %}
         <nav>
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
+            <a href="{{ url_for('register') }}">Register</a>
             <a href="{{ url_for('students') }}">Students</a>
             <a href="{{ url_for('attendance') }}">Attendance</a>
             <a href="{{ url_for('logout') }}">Logout</a>
